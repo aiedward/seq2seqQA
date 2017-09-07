@@ -17,6 +17,8 @@ from tensorflow.python.platform import gfile
 import tensorflow as tf
 import re
 import argparse
+import numpy as np
+
 
 # Special vocabulary symbols - we always put them at the start.
 _PAD = b"_PAD"
@@ -174,6 +176,33 @@ def create_voc_command():
 
 def data_to_tokens_command():
     return data_to_token_ids(FLAGS.data, FLAGS.target, FLAGS.voc)
+
+
+def get_data(questions_path, answers_path):
+    questions = []
+    answers = []
+    max_question_length = 0
+    with tf.gfile.GFile(questions_path, mode='r') as questions_file:
+        with tf.gfile.GFile(answers_path, mode='r') as answers_file:
+            question, answer = questions_file.readline(), answers_file.readline()
+            while question and answer:
+                question_ids = [int(x) for x in question.split()]
+                if len(question_ids) > max_question_length:
+                    max_question_length = len(question_ids)
+                answer_ids = [int(x) for x in answer.split()]
+                questions.append(np.array(question_ids, dtype=np.int32))
+                answers.append(answer_ids)
+                question, answer = questions_file.readline(), answers_file.readline()
+    questions_result = []
+    questions_seq_length = []
+    for q in questions:
+        questions_seq_length.append(len(q))
+        if len(q) < max_question_length:
+            questions_result.append(np.append(q, np.array([0 for _ in range(max_question_length - len(q))],
+                                                          dtype=np.int32)))
+        else:
+            questions_result.append(q)
+    return np.array(questions_result), questions_seq_length, answers, max_question_length
 
 
 if __name__ == '__main__':

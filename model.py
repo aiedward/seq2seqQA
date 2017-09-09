@@ -2,12 +2,17 @@ import tensorflow as tf
 import numpy as np
 import data_utils
 from tensorflow.contrib import layers
+from tqdm import *
 
 
 ENCODER_UNITS = 10
 DECODER_UNITS = 10
 EMBEDDING_SIZE = 10
 
+
+tf.app.flags.DEFINE_boolean('train_mode', True, 'Run in a training mode')
+tf.app.flags.DEFINE_integer('num_epochs', 5000, 'Number of epochs')
+FLAGS = tf.app.flags.FLAGS
 
 sess = tf.Session()
 
@@ -51,9 +56,14 @@ init_op = tf.group(tf.global_variables_initializer(),
                    tf.local_variables_initializer())
 sess.run(init_op)
 
-loss, _ = sess.run([loss_op, train_op], feed_dict={inputs: questions,
-                                                   questions_seq_length_pc: np.array(q_seq_length),
-                                                   decoder_inputs: answers_inputs,
-                                                   decoder_targets: answers_targets,
-                                                   answers_seq_length_pc: np.array(a_seq_length)})
-print()
+train_writer = tf.summary.FileWriter('/home/thetweak/Developer/agora_qa_seq2seq/log', sess.graph)
+tf.summary.scalar('loss', loss_op)
+merged_summary = tf.summary.merge_all()
+
+for e in tqdm(range(FLAGS.num_epochs)):
+    summary, _ = sess.run([merged_summary, train_op], feed_dict={inputs: questions,
+                                                                 questions_seq_length_pc: q_seq_length,
+                                                                 decoder_inputs: answers_inputs,
+                                                                 decoder_targets: answers_targets,
+                                                                 answers_seq_length_pc: a_seq_length})
+    train_writer.add_summary(summary, e)

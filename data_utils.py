@@ -210,17 +210,16 @@ def get_data(questions_path, answers_path):
     a_seq_length = []
     for a in answers:
         a_seq_length.append(len(a) + 1)  # +1 for EOS token
-        a_eos = np.append(a, [EOS_ID])
-        eos_a = np.insert(a, 0, [EOS_ID])
+        a_eos = a + [EOS_ID]
+        eos_a = [EOS_ID] + a
         if len(a) < max_answer_length:
-            trailing_zeros = np.array([0 for _ in range(max_answer_length - len(a) - 1)],  # EOS token
-                                                        dtype=np.int32)
-            answers_inputs.append(np.append(a_eos, trailing_zeros))
-            answers_targets.append(np.append(eos_a, trailing_zeros))
+            trailing_zeros = [0 for _ in range(max_answer_length - len(a))]  # EOS token
+            answers_inputs.append(a_eos + trailing_zeros)
+            answers_targets.append(eos_a + trailing_zeros)
         else:
             answers_inputs.append(a_eos)
             answers_targets.append(eos_a)
-    return np.array(questions_result), q_seq_length, np.array(answers_inputs), np.array(answers_targets), a_seq_length
+    return np.array(questions_result), np.array(q_seq_length), np.array(answers_inputs), np.array(answers_targets), np.array(a_seq_length)
 
 
 if __name__ == '__main__':

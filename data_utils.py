@@ -110,7 +110,7 @@ def initialize_vocabulary(vocabulary_path):
             rev_vocab.extend(f.readlines())
         rev_vocab = [tf.compat.as_bytes(line.strip()) for line in rev_vocab]
         vocab = dict([(x, y) for (y, x) in enumerate(rev_vocab)])
-        return vocab, rev_vocab
+        return vocab, rev_vocab, len(rev_vocab)
     else:
         raise ValueError("Vocabulary file %s not found.", vocabulary_path)
 
@@ -182,6 +182,7 @@ def get_data(questions_path, answers_path):
     questions = []
     answers = []
     max_question_length = 0
+    max_answer_length = 0
     with tf.gfile.GFile(questions_path, mode='r') as questions_file:
         with tf.gfile.GFile(answers_path, mode='r') as answers_file:
             question, answer = questions_file.readline(), answers_file.readline()
@@ -190,19 +191,36 @@ def get_data(questions_path, answers_path):
                 if len(question_ids) > max_question_length:
                     max_question_length = len(question_ids)
                 answer_ids = [int(x) for x in answer.split()]
+                if len(answer_ids) > max_answer_length:
+                    max_answer_length = len(answer_ids)
                 questions.append(np.array(question_ids, dtype=np.int32))
                 answers.append(answer_ids)
                 question, answer = questions_file.readline(), answers_file.readline()
     questions_result = []
-    questions_seq_length = []
+    q_seq_length = []
     for q in questions:
-        questions_seq_length.append(len(q))
+        q_seq_length.append(len(q))
         if len(q) < max_question_length:
             questions_result.append(np.append(q, np.array([0 for _ in range(max_question_length - len(q))],
                                                           dtype=np.int32)))
         else:
             questions_result.append(q)
-    return np.array(questions_result), questions_seq_length, answers, max_question_length
+    answers_inputs = []
+    answers_targets = []
+    a_seq_length = []
+    for a in answers:
+        a_seq_length.append(len(a) + 1)  # +1 for EOS token
+        a_eos = np.append(a, [EOS_ID])
+        eos_a = np.insert(a, 0, [EOS_ID])
+        if len(a) < max_answer_length:
+            trailing_zeros = np.array([0 for _ in range(max_answer_length - len(a) - 1)],  # EOS token
+                                                        dtype=np.int32)
+            answers_inputs.append(np.append(a_eos, trailing_zeros))
+            answers_targets.append(np.append(eos_a, trailing_zeros))
+        else:
+            answers_inputs.append(a_eos)
+            answers_targets.append(eos_a)
+    return np.array(questions_result), q_seq_length, np.array(answers_inputs), np.array(answers_targets), a_seq_length
 
 
 if __name__ == '__main__':

@@ -10,36 +10,50 @@ EMBEDDING_SIZE = 10
 
 
 sess = tf.Session()
-cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=ENCODER_UNITS)
-questions, questions_seq_length, answers, max_question_length = data_utils.get_data('questions_tokenized.txt',
-                                                                                    'answers_tokenized.txt')
-inputs = tf.placeholder(tf.int32, [None, None])
-decoder_inputs = tf.placeholder(tf.int32, [None, None])
 
-vocabulary = data_utils.initialize_vocabulary('vocabulary.txt')
-embeddings = tf.Variable(tf.random_uniform([len(vocabulary), EMBEDDING_SIZE], -1.0, 1.0), dtype=tf.float32)
+questions, q_seq_length, answers_inputs, answers_targets, a_seq_length = data_utils.get_data('questions_tokenized.txt',
+                                                                                             'answers_tokenized.txt')
+inputs = tf.placeholder(tf.int32, [None, None], name='encoder_inputs')
+decoder_inputs = tf.placeholder(tf.int32, [None, None], name='decoder_inputs')
+decoder_targets = tf.placeholder(tf.int32, [None, None], name='decoder_targets')
+
+vocabulary, rev_vocabulary, vocabulary_size = data_utils.initialize_vocabulary('vocabulary.txt')
+embeddings = tf.Variable(tf.random_uniform([vocabulary_size, EMBEDDING_SIZE], -1.0, 1.0), dtype=tf.float32,
+                         name='embeddings')
 
 inputs_embed = tf.nn.embedding_lookup(embeddings, inputs)
 decoder_inputs_embed = tf.nn.embedding_lookup(embeddings, decoder_inputs)
 
-questions_seq_length_pc = tf.placeholder(tf.int32, [None])
-answers_seq_length_pc = tf.placeholder(tf.int32, [None])
+questions_seq_length_pc = tf.placeholder(tf.int32, [None], name='questions_sequence_length')
+answers_seq_length_pc = tf.placeholder(tf.int32, [None], name='answers_sequence_length')
 
-encoder_output, encoder_state = tf.nn.dynamic_rnn(cell, inputs_embed, dtype=tf.float32,
-                                                  sequence_length=questions_seq_length_pc)
+with tf.variable_scope('encoder'):
+    cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=ENCODER_UNITS)
+    encoder_output, encoder_state = tf.nn.dynamic_rnn(cell, inputs_embed, dtype=tf.float32,
+                                                      sequence_length=questions_seq_length_pc)
+with tf.variable_scope('decoder'):
+    decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=DECODER_UNITS)
+    decoder_output, decoder_state = tf.nn.dynamic_rnn(decoder_cell, decoder_inputs_embed, dtype=tf.float32,
+                                                      sequence_length=answers_seq_length_pc,
+                                                      initial_state=encoder_state)
+    
+decoder_logits = layers.fully_connected(decoder_output, vocabulary_size)
+decoder_prediction = tf.argmax(decoder_logits, 2)
 
-decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=DECODER_UNITS)
+stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+    labels=tf.one_hot(decoder_targets, depth=vocabulary_size, dtype=tf.float32),
+    logits=decoder_logits)
 
-decoder_output, decoder_state = tf.nn.dynamic_rnn(decoder_cell, decoder_inputs_embed, dtype=tf.float32,
-                                                  sequence_length=answers_seq_length_pc, initial_state=encoder_state)
-
-# TODO: Projection layer
-# TODO: Loss function
+loss_op = tf.reduce_mean(stepwise_cross_entropy)
+train_op = tf.train.AdamOptimizer().minimize(loss_op)
 
 init_op = tf.group(tf.global_variables_initializer(),
                    tf.local_variables_initializer())
 sess.run(init_op)
 
-encoder_output, encoder_state = sess.run([encoder_output, encoder_state], feed_dict={inputs: questions,
-                                     questions_seq_length_pc: np.array(questions_seq_length)})
+loss, _ = sess.run([loss_op, train_op], feed_dict={inputs: questions,
+                                                   questions_seq_length_pc: np.array(q_seq_length),
+                                                   decoder_inputs: answers_inputs,
+                                                   decoder_targets: answers_targets,
+                                                   answers_seq_length_pc: np.array(a_seq_length)})
 print()

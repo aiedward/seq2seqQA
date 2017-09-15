@@ -56,7 +56,7 @@ init_op = tf.group(tf.global_variables_initializer(),
                    tf.local_variables_initializer())
 sess.run(init_op)
 
-train_writer = tf.summary.FileWriter('/home/thetweak/Developer/agora_qa_seq2seq/log', sess.graph)
+train_writer = tf.summary.FileWriter('/Users/sorokinevgeny/Developer/deep-learning/seq2seqQA/log', sess.graph)
 tf.summary.scalar('loss', loss_op)
 merged_summary = tf.summary.merge_all()
 

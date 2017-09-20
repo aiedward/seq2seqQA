@@ -42,3 +42,18 @@ with tf.variable_scope('response_encoder'):
     response_encoder_output, response_encoder_state = tf.nn.dynamic_rnn(cell, emb_response_encoder_inputs,
                                                                         dtype=tf.float32,
                                                                         sequence_length=answers_seq_length_pc)
+
+with tf.variable_scope('learn_matrix'):
+    M = tf.get_variable('M', shape=[CONTEXT_ENCODER_UNITS, RESPONSE_ENCODER_UNITS],
+                        initializer=tf.truncated_normal_initializer())
+
+generated_context = response_encoder_state.h @ M
+dot_product = tf.reduce_sum(tf.multiply(context_encoder_state.h, generated_context), 1, keep_dims=True)
+
+init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+sess.run(init_op)
+dot_product_result = sess.run(dot_product, feed_dict={context_encoder_inputs: questions,
+                                                      questions_seq_length_pc: q_seq_length,
+                                                      response_encoder_inputs: answers_inputs,
+                                                      answers_seq_length_pc: a_seq_length})
+print(dot_product_result)

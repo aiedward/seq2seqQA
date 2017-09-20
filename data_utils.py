@@ -18,6 +18,7 @@ import tensorflow as tf
 import re
 import argparse
 import numpy as np
+import random
 
 
 # Special vocabulary symbols - we always put them at the start.
@@ -222,6 +223,38 @@ def get_data(questions_path, answers_path):
     return np.array(questions_result), np.array(q_seq_length), np.array(answers_inputs), np.array(answers_targets), np.array(a_seq_length)
 
 
+def generate_incorrect_qa_pairs_cmd():
+    result = generate_incorrect_qa_pairs(FLAGS.questions, FLAGS.answers)
+    with tf.gfile.GFile(FLAGS.questions, mode='a') as questions_file:
+        with tf.gfile.GFile(FLAGS.answers, mode='a') as answers_file:
+            with tf.gfile.GFile(FLAGS.targets, mode='a') as targets_file:
+                for (q, a) in result:
+                    questions_file.write('\n')
+                    questions_file.write(q)
+                    answers_file.write('\n')
+                    answers_file.write(a)
+                    targets_file.write('\n')
+                    targets_file.write('0')
+
+
+def generate_incorrect_qa_pairs(questions_path, answers_path):
+    with tf.gfile.GFile(questions_path, mode='r') as questions_file:
+        questions = questions_file.read()
+    with tf.gfile.GFile(answers_path, mode='r') as answers_file:
+        answers = answers_file.read()
+    questions = questions.split('\n')
+    answers = answers.split('\n')
+    result = []
+    for qi, q in enumerate(questions):
+        picked = False
+        while not picked:
+            index = random.randint(0, len(answers) - 1)
+            picked = index != qi
+        answer = answers[index]
+        result.append((q, answer))
+    return result
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -236,6 +269,12 @@ if __name__ == '__main__':
     parser_data_to_tok.add_argument('--voc', type=str, required=True, help='Vocabulary path')
     parser_data_to_tok.add_argument('--data', type=str, required=True, help='Data path')
     parser_data_to_tok.add_argument('--target', type=str, required=True, help='Target path')
+
+    parser_gen_inc_qa = subparsers.add_parser('gen', help='generate incorrect Q-A pairs')
+    parser_gen_inc_qa.set_defaults(func=generate_incorrect_qa_pairs_cmd)
+    parser_gen_inc_qa.add_argument('--questions', type=str, required=True, help='Questions path')
+    parser_gen_inc_qa.add_argument('--answers', type=str, required=True, help='Answers path')
+    parser_gen_inc_qa.add_argument('--targets', type=str, required=True, help='Targets path')
 
     FLAGS, unparsed = parser.parse_known_args()
     if FLAGS.func:

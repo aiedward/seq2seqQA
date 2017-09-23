@@ -20,6 +20,7 @@ questions, q_seq_length, answers_inputs, answers_targets, a_seq_length = data_ut
                                                                                              'answers_tokenized.txt')
 context_encoder_inputs = tf.placeholder(tf.int32, [None, None], name='context_encoder_inputs')
 response_encoder_inputs = tf.placeholder(tf.int32, [None, None], name='response_encoder_inputs')
+labels = tf.placeholder(tf.int32, [None], name='labels')
 
 vocabulary, rev_vocabulary, vocabulary_size = data_utils.initialize_vocabulary('vocabulary.txt')
 embeddings = tf.Variable(tf.random_uniform([vocabulary_size, EMBEDDING_SIZE], -1.0, 1.0), dtype=tf.float32,
@@ -50,15 +51,16 @@ with tf.variable_scope('learn_matrix'):
 with tf.variable_scope('bias'):
     b = tf.get_variable('b', initializer=tf.constant(0.1, shape=[CONTEXT_ENCODER_UNITS]))
 
-enc_m = response_encoder_state.h @ M
-generated_context = enc_m + b
-dot_product = tf.reduce_sum(tf.multiply(context_encoder_state.h, generated_context), 1, keep_dims=True)
-sigmoid = tf.sigmoid(dot_product)
+generated_context = response_encoder_state.h @ M + b
+dot_product = tf.squeeze(tf.reduce_sum(tf.multiply(context_encoder_state.h, generated_context), 1, keep_dims=True))
+predictions = tf.sigmoid(dot_product)
+x_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.to_float(labels), logits=dot_product)
 
 init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 sess.run(init_op)
-sigmoid_r = sess.run([sigmoid], feed_dict={context_encoder_inputs: questions,
-                                           questions_seq_length_pc: q_seq_length,
-                                           response_encoder_inputs: answers_inputs,
-                                           answers_seq_length_pc: a_seq_length})
+x_entropy_r, predictions_r = sess.run([x_entropy, predictions], feed_dict={context_encoder_inputs: questions,
+                                                                           questions_seq_length_pc: q_seq_length,
+                                                                           response_encoder_inputs: answers_inputs,
+                                                                           answers_seq_length_pc: a_seq_length,
+                                                                           labels: np.zeros([59])})
 print()

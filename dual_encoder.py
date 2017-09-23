@@ -47,13 +47,18 @@ with tf.variable_scope('learn_matrix'):
     M = tf.get_variable('M', shape=[CONTEXT_ENCODER_UNITS, RESPONSE_ENCODER_UNITS],
                         initializer=tf.truncated_normal_initializer())
 
-generated_context = response_encoder_state.h @ M
+with tf.variable_scope('bias'):
+    b = tf.get_variable('b', initializer=tf.constant(0.1, shape=[CONTEXT_ENCODER_UNITS]))
+
+enc_m = response_encoder_state.h @ M
+generated_context = enc_m + b
 dot_product = tf.reduce_sum(tf.multiply(context_encoder_state.h, generated_context), 1, keep_dims=True)
+sigmoid = tf.sigmoid(dot_product)
 
 init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 sess.run(init_op)
-dot_product_result = sess.run(dot_product, feed_dict={context_encoder_inputs: questions,
-                                                      questions_seq_length_pc: q_seq_length,
-                                                      response_encoder_inputs: answers_inputs,
-                                                      answers_seq_length_pc: a_seq_length})
-print(dot_product_result)
+sigmoid_r = sess.run([sigmoid], feed_dict={context_encoder_inputs: questions,
+                                           questions_seq_length_pc: q_seq_length,
+                                           response_encoder_inputs: answers_inputs,
+                                           answers_seq_length_pc: a_seq_length})
+print()

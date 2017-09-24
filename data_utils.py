@@ -179,7 +179,7 @@ def data_to_tokens_command():
     return data_to_token_ids(FLAGS.data, FLAGS.target, FLAGS.voc)
 
 
-def get_data(questions_path, answers_path):
+def get_data(questions_path, answers_path, labels_path):
     questions = []
     answers = []
     max_question_length = 0
@@ -206,21 +206,22 @@ def get_data(questions_path, answers_path):
                                                           dtype=np.int32)))
         else:
             questions_result.append(q)
-    answers_inputs = []
-    answers_targets = []
+    answers_result = []
     a_seq_length = []
     for a in answers:
-        a_seq_length.append(len(a) + 1)  # +1 for EOS token
-        a_eos = a + [EOS_ID]
-        eos_a = [EOS_ID] + a
+        a_seq_length.append(len(a))
         if len(a) < max_answer_length:
-            trailing_zeros = [0 for _ in range(max_answer_length - len(a))]  # EOS token
-            answers_inputs.append(a_eos + trailing_zeros)
-            answers_targets.append(eos_a + trailing_zeros)
+            answers_result.append(np.append(a, np.array([0 for _ in range(max_answer_length - len(a))],
+                                                        dtype=np.int32)))
         else:
-            answers_inputs.append(a_eos)
-            answers_targets.append(eos_a)
-    return np.array(questions_result), np.array(q_seq_length), np.array(answers_inputs), np.array(answers_targets), np.array(a_seq_length)
+            answers_result.append(a)
+    labels = []
+    with tf.gfile.GFile(labels_path, mode='r') as labels_file:
+        label = labels_file.readline()
+        while label:
+            labels.append(int(label))
+            label = labels_file.readline()
+    return np.array(questions_result), np.array(q_seq_length), np.array(answers_result), np.array(a_seq_length), np.array(labels)
 
 
 def generate_incorrect_qa_pairs_cmd():

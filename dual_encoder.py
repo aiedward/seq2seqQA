@@ -7,21 +7,21 @@ from tqdm import *
 
 CONTEXT_ENCODER_UNITS = 50
 RESPONSE_ENCODER_UNITS = 50
-EMBEDDING_SIZE = 10
+EMBEDDING_SIZE = 50
 
 
 tf.app.flags.DEFINE_boolean('train_mode', True, 'Run in a training mode')
-tf.app.flags.DEFINE_integer('num_epochs', 1500, 'Number of epochs')
+tf.app.flags.DEFINE_integer('num_epochs', 10000, 'Number of epochs')
 tf.app.flags.DEFINE_string('model_dir', 'v0', 'Model checkpoint directory')
-tf.app.flags.DEFINE_string('questions', 'questions_tokenized.txt', 'Tokenized questions')
-tf.app.flags.DEFINE_string('answers', 'answers_tokenized.txt', 'Tokenized answers')
+tf.app.flags.DEFINE_string('questions_train', 'questions_tokenized.txt', 'Tokenized questions for training')
+tf.app.flags.DEFINE_string('answers_train', 'answers_tokenized.txt', 'Tokenized answers for training')
 tf.app.flags.DEFINE_string('labels', 'labels.txt', 'Labels')
 FLAGS = tf.app.flags.FLAGS
 
 sess = tf.Session()
 
-questions, q_seq_length, answers, a_seq_length, labels = data_utils.get_data(FLAGS.questions,
-                                                                             FLAGS.answers,
+questions, q_seq_length, answers, a_seq_length, labels = data_utils.get_data(FLAGS.questions_train,
+                                                                             FLAGS.answers_train,
                                                                              FLAGS.labels)
 
 context_encoder_inputs = tf.placeholder(tf.int32, [None, None], name='context_encoder_inputs')
@@ -71,13 +71,25 @@ if FLAGS.train_mode:
     train_writer = tf.summary.FileWriter('log/' + FLAGS.model_dir, sess.graph)
     tf.summary.scalar('x_entropy', x_entropy)
     merged_summary = tf.summary.merge_all()
-
+    top_k_op = tf.nn.top_k(predictions, k=5)
     for e in tqdm(range(FLAGS.num_epochs)):
         summary, _ = sess.run([merged_summary, train_op], feed_dict={context_encoder_inputs: questions,
                                                                      questions_seq_length_pc: q_seq_length,
                                                                      response_encoder_inputs: answers,
                                                                      answers_seq_length_pc: a_seq_length,
                                                                      labels_input: labels})
+        if e % 100 == 0:
+            for i in [6, 2, 15]:
+                q_path = 'question_test_{}_tokenized.txt'.format(i)
+                question_v, q_v_seq_length, answers_all, a_seq_length_all, _ = data_utils.get_data(q_path,
+                                                                                                   'all_answers_tokenized.txt',
+                                                                                                   FLAGS.labels)
+                top_k, predictions_r = sess.run([top_k_op, predictions], feed_dict={context_encoder_inputs: question_v,
+                                                                                    questions_seq_length_pc: q_v_seq_length,
+                                                                                    response_encoder_inputs: answers_all,
+                                                                                    answers_seq_length_pc: a_seq_length_all})
+                correct = i in top_k.indices
+                print('Prediction for question {} is {}correct: {}'.format(i, '' if correct else 'not ', top_k.indices))
         train_writer.add_summary(summary, e)
     saver.save(sess, FLAGS.model_dir)
 else:

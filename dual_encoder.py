@@ -7,14 +7,14 @@ from tqdm import *
 
 CONTEXT_ENCODER_UNITS = 50
 RESPONSE_ENCODER_UNITS = 50
-EMBEDDING_SIZE = 50
+EMBEDDING_SIZE = 300
 
 
 tf.app.flags.DEFINE_boolean('train_mode', True, 'Run in a training mode')
 tf.app.flags.DEFINE_integer('num_epochs', 10000, 'Number of epochs')
 tf.app.flags.DEFINE_string('model_dir', 'v0', 'Model checkpoint directory')
-tf.app.flags.DEFINE_string('questions_train', 'questions_tokenized.txt', 'Tokenized questions for training')
-tf.app.flags.DEFINE_string('answers_train', 'answers_tokenized.txt', 'Tokenized answers for training')
+tf.app.flags.DEFINE_string('questions_train', 'questions_tokenized_emb.txt', 'Tokenized questions for training')
+tf.app.flags.DEFINE_string('answers_train', 'answers_tokenized_emb.txt', 'Tokenized answers for training')
 tf.app.flags.DEFINE_string('labels', 'labels.txt', 'Labels')
 FLAGS = tf.app.flags.FLAGS
 
@@ -23,14 +23,18 @@ sess = tf.Session()
 questions, q_seq_length, answers, a_seq_length, labels = data_utils.get_data(FLAGS.questions_train,
                                                                              FLAGS.answers_train,
                                                                              FLAGS.labels)
+embeddings_array = np.load('/home/thetweak/Developer/agora_qa_seq2seq/embeddings.npy')
 
 context_encoder_inputs = tf.placeholder(tf.int32, [None, None], name='context_encoder_inputs')
 response_encoder_inputs = tf.placeholder(tf.int32, [None, None], name='response_encoder_inputs')
 labels_input = tf.placeholder(tf.int32, [None], name='labels')
 
-vocabulary, rev_vocabulary, vocabulary_size = data_utils.initialize_vocabulary('vocabulary.txt')
-embeddings = tf.Variable(tf.random_uniform([vocabulary_size, EMBEDDING_SIZE], -1.0, 1.0), dtype=tf.float32,
+vocabulary, rev_vocabulary, vocabulary_size = data_utils.initialize_vocabulary('vocabulary_embeddings.txt')
+embeddings = tf.Variable(tf.constant(0.0, tf.float32, [vocabulary_size, EMBEDDING_SIZE]), dtype=tf.float32, trainable=False,
                          name='embeddings')
+
+embeddings_placeholder = tf.placeholder(tf.float32, [vocabulary_size, EMBEDDING_SIZE])
+embeddings = embeddings.assign(embeddings_placeholder)
 
 emb_context_encoder_inputs = tf.nn.embedding_lookup(embeddings, context_encoder_inputs)
 emb_response_encoder_inputs = tf.nn.embedding_lookup(embeddings, response_encoder_inputs)
@@ -73,21 +77,23 @@ if FLAGS.train_mode:
     merged_summary = tf.summary.merge_all()
     top_k_op = tf.nn.top_k(predictions, k=5)
     for e in tqdm(range(FLAGS.num_epochs)):
-        summary, _ = sess.run([merged_summary, train_op], feed_dict={context_encoder_inputs: questions,
-                                                                     questions_seq_length_pc: q_seq_length,
-                                                                     response_encoder_inputs: answers,
-                                                                     answers_seq_length_pc: a_seq_length,
-                                                                     labels_input: labels})
+        summary, _, emb_context_encoder_inputs_r = sess.run([merged_summary, train_op, emb_context_encoder_inputs], feed_dict={context_encoder_inputs: questions,
+                                                                                                                               questions_seq_length_pc: q_seq_length,
+                                                                                                                               response_encoder_inputs: answers,
+                                                                                                                               answers_seq_length_pc: a_seq_length,
+                                                                                                                               labels_input: labels,
+                                                                                                                               embeddings_placeholder: embeddings_array})
         if e % 100 == 0:
             for i in [6, 2, 15]:
-                q_path = 'question_test_{}_tokenized.txt'.format(i)
+                q_path = 'question_test_{}_tokenized_emb.txt'.format(i)
                 question_v, q_v_seq_length, answers_all, a_seq_length_all, _ = data_utils.get_data(q_path,
-                                                                                                   'all_answers_tokenized.txt',
+                                                                                                   'all_answers_tokenized_emb.txt',
                                                                                                    FLAGS.labels)
                 top_k, predictions_r = sess.run([top_k_op, predictions], feed_dict={context_encoder_inputs: question_v,
                                                                                     questions_seq_length_pc: q_v_seq_length,
                                                                                     response_encoder_inputs: answers_all,
-                                                                                    answers_seq_length_pc: a_seq_length_all})
+                                                                                    answers_seq_length_pc: a_seq_length_all,
+                                                                                    embeddings_placeholder: embeddings_array})
                 correct = i in top_k.indices
                 print('Prediction for question {} is {}correct: {}'.format(i, '' if correct else 'not ', top_k.indices))
         train_writer.add_summary(summary, e)
@@ -98,5 +104,6 @@ else:
     predictions_r, top_k = sess.run([predictions, top_k_op], feed_dict={context_encoder_inputs: questions,
                                                                         questions_seq_length_pc: q_seq_length,
                                                                         response_encoder_inputs: answers,
-                                                                        answers_seq_length_pc: a_seq_length})
+                                                                        answers_seq_length_pc: a_seq_length,
+                                                                        embeddings_placeholder: embeddings_array})
     print(top_k.indices)

@@ -19,6 +19,7 @@ import re
 import argparse
 import numpy as np
 import random
+from tqdm import *
 
 
 # Special vocabulary symbols - we always put them at the start.
@@ -82,7 +83,7 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size=100000,
                         vocab[word] += 1
                     else:
                         vocab[word] = 1
-            vocab_list = _START_VOCAB + sorted(vocab, key=vocab.get, reverse=True)
+            vocab_list = sorted(vocab, key=vocab.get, reverse=True)
             if len(vocab_list) > max_vocabulary_size:
                 vocab_list = vocab_list[:max_vocabulary_size]
             with gfile.GFile(vocabulary_path, mode="wb") as vocab_file:
@@ -256,6 +257,34 @@ def generate_incorrect_qa_pairs(questions_path, answers_path):
     return result
 
 
+def create_embeddings_cmd():
+    return create_embeddings(FLAGS.embeddings, FLAGS.output, FLAGS.vocabulary)
+
+
+def create_embeddings(embeddings_path, output_path, vocabulary_path):
+    vocabulary, rev_vocabulary, _ = initialize_vocabulary(vocabulary_path)
+    embeddings = {}
+    with tf.gfile.GFile(embeddings_path, mode='r') as embeddings_file:
+        lines = embeddings_file.readlines()
+        for line in tqdm(lines):
+            columns = line.split(' ')
+            word = columns[0].encode('utf-8')
+            if word in vocabulary:
+                embeddings[word] = ([float(i) for i in columns[1:]])
+    embeddings_array = []
+    new_vocabulary = []
+    for word in tqdm(rev_vocabulary):
+        if word in embeddings:
+            embeddings_array.append(embeddings[word])
+            new_vocabulary.append(word)
+        else:
+            print('{} not found in embeddings'.format(word))
+    with gfile.GFile('vocabulary_embeddings.txt', mode="wb") as vocab_file:
+        for w in new_vocabulary:
+            vocab_file.write(w + b"\n")
+    np.save(output_path, embeddings_array)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -276,6 +305,12 @@ if __name__ == '__main__':
     parser_gen_inc_qa.add_argument('--questions', type=str, required=True, help='Questions path')
     parser_gen_inc_qa.add_argument('--answers', type=str, required=True, help='Answers path')
     parser_gen_inc_qa.add_argument('--targets', type=str, required=True, help='Targets path')
+
+    parser_create_emb = subparsers.add_parser('create_emb', help='create embeddings')
+    parser_create_emb.set_defaults(func=create_embeddings_cmd)
+    parser_create_emb.add_argument('--embeddings', type=str, required=True, help='Embeddings path')
+    parser_create_emb.add_argument('--output', type=str, required=True, help='Output path')
+    parser_create_emb.add_argument('--vocabulary', type=str, required=True, help='Vocabulary path')
 
     FLAGS, unparsed = parser.parse_known_args()
     if FLAGS.func:

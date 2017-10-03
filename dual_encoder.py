@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import data_utils
-from tensorflow.contrib import layers
 from tqdm import *
 import datetime
 
@@ -72,7 +71,7 @@ with tf.variable_scope('learn_matrix'):
                         initializer=tf.truncated_normal_initializer())
 
 with tf.variable_scope('bias'):
-    b = tf.get_variable('b', initializer=tf.constant(0.1, shape=[CONTEXT_ENCODER_UNITS]))
+    b = tf.get_variable('b', initializer=tf.constant(0.0, shape=[CONTEXT_ENCODER_UNITS]))
 
 num_examples = tf.get_variable('num_examples', shape=[], dtype=tf.int32)
 num_correct = tf.get_variable('num_correct', shape=[], dtype=tf.int32)
@@ -96,12 +95,12 @@ if FLAGS.train_mode:
     merged_summary = tf.summary.merge_all()
     top_k_op = tf.nn.top_k(predictions, k=TOP_K)
     for e in tqdm(range(FLAGS.num_epochs)):
-        dot_product_r, x_entropy_op_r, summary, _, emb_context_encoder_inputs_r = sess.run([dot_product, x_entropy_op, merged_summary, train_op, emb_context_encoder_inputs], feed_dict={context_encoder_inputs: questions,
-                                                                                                                               questions_seq_length_pc: q_seq_length,
-                                                                                                                               response_encoder_inputs: answers,
-                                                                                                                               answers_seq_length_pc: a_seq_length,
-                                                                                                                               labels_input: labels,
-                                                                                                                               embeddings_placeholder: embeddings_array})
+        summary, _ = sess.run([merged_summary, train_op], feed_dict={context_encoder_inputs: questions,
+                                                                     questions_seq_length_pc: q_seq_length,
+                                                                     response_encoder_inputs: answers,
+                                                                     answers_seq_length_pc: a_seq_length,
+                                                                     labels_input: labels,
+                                                                     embeddings_placeholder: embeddings_array})
         if e % 100 == 0:
             num_correct_value = 0
             for (qi, qt) in questions_eval.items():
